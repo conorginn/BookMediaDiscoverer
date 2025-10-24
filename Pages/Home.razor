@@ -3,6 +3,7 @@
 @using BookMediaDiscoverer.Services
 @inject IBookService BookService
 @inject IMovieService MovieService
+@inject NavigationManager NavigationManager
 
 <PageTitle>Book & Media Discoverer</PageTitle>
 
@@ -137,10 +138,14 @@ else
         return description.Length > maxLength ? description.Substring(0, maxLength) + "..." : description;
     }
 
-    private string GetMoviePoster(string posterUrl)
+private string GetMoviePoster(string posterUrl)
+{
+    if (string.IsNullOrEmpty(posterUrl) || posterUrl == "N/A")
     {
-        return string.IsNullOrEmpty(posterUrl) || posterUrl == "N/A" ? "/placeholder-movie.png" : posterUrl;
+        return $"{NavigationManager.BaseUri}placeholder-movie.png";
     }
+    return posterUrl;
+}
 
     private async Task SearchBooks()
     {

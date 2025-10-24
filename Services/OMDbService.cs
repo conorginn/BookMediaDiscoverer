@@ -12,7 +12,7 @@ namespace BookMediaDiscoverer.Services
         public OMDbService(HttpClient httpClient)
         {
             _httpClient = httpClient;
-            _apiKey = "752862ab"; // Using demo key - replace with real key for production
+            _apiKey = "752862ab"; 
         }
 
         public async Task<List<Movie>> SearchMoviesAsync(string query)
