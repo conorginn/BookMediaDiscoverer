@@ -6,13 +6,13 @@ namespace BookMediaDiscoverer.Services
     public class OMDbService : IMovieService
     {
         private readonly HttpClient _httpClient;
-        private const string BaseUrl = "https://www.omdbapi.com/"; // Using HTTPS
+        private const string BaseUrl = "https://www.omdbapi.com/";
         private readonly string _apiKey;
 
         public OMDbService(HttpClient httpClient)
         {
             _httpClient = httpClient;
-            _apiKey = "752862ab"; // Using demo key for testing
+            _apiKey = "752862ab"; // Using demo key - replace with real key for production
         }
 
         public async Task<List<Movie>> SearchMoviesAsync(string query)
@@ -54,29 +54,47 @@ namespace BookMediaDiscoverer.Services
 
                 Console.WriteLine($"Found {result.Search.Count} movies in search results");
 
-                // Convert search results to Movie objects with basic info
-                var movies = result.Search.Select(item => new Movie
+                // Get detailed information for each movie (limited to avoid too many requests)
+                var movies = new List<Movie>();
+                foreach (var movieItem in result.Search.Take(5)) // Limit to 5 movies
                 {
-                    ImdbID = item.ImdbID,
-                    Title = item.Title,
-                    Year = item.Year,
-                    Type = item.Type,
-                    Poster = item.Poster,
-                    // Add placeholder data for other fields
-                    Rated = "N/A",
-                    Released = "N/A",
-                    Runtime = "N/A",
-                    Genre = "N/A",
-                    Director = "N/A",
-                    Writer = "N/A",
-                    Actors = "N/A",
-                    Plot = "Plot details available in full movie view",
-                    Language = "N/A",
-                    Country = "N/A",
-                    ImdbRating = "N/A"
-                }).ToList();
+                    if (!string.IsNullOrEmpty(movieItem.ImdbID))
+                    {
+                        try
+                        {
+                            var movie = await GetMovieDetailsAsync(movieItem.ImdbID);
+                            if (movie != null)
+                            {
+                                movies.Add(movie);
+                                Console.WriteLine($"Retrieved details for: {movie.Title}");
+                            }
 
-                Console.WriteLine($"Returning {movies.Count} movies");
+                            // Small delay to be respectful to the API
+                            await Task.Delay(200);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error getting details for {movieItem.Title}: {ex.Message}");
+                            // Add basic movie info if detailed fetch fails
+                            movies.Add(new Movie
+                            {
+                                ImdbID = movieItem.ImdbID,
+                                Title = movieItem.Title,
+                                Year = movieItem.Year,
+                                Type = movieItem.Type,
+                                Poster = movieItem.Poster,
+                                Plot = "Detailed information not available",
+                                Rated = "N/A",
+                                Runtime = "N/A",
+                                Genre = "N/A",
+                                Director = "N/A",
+                                ImdbRating = "N/A"
+                            });
+                        }
+                    }
+                }
+
+                Console.WriteLine($"Successfully retrieved {movies.Count} detailed movie records");
                 return movies;
             }
             catch (Exception ex)
@@ -91,7 +109,7 @@ namespace BookMediaDiscoverer.Services
             try
             {
                 Console.WriteLine($"Getting details for movie: {imdbId}");
-                var url = $"{BaseUrl}?apikey={_apiKey}&i={imdbId}";
+                var url = $"{BaseUrl}?apikey={_apiKey}&i={imdbId}&plot=short";
 
                 var response = await _httpClient.GetAsync(url);
                 if (!response.IsSuccessStatusCode)
@@ -106,6 +124,11 @@ namespace BookMediaDiscoverer.Services
                     PropertyNameCaseInsensitive = true
                 });
 
+                if (movie != null)
+                {
+                    Console.WriteLine($"Successfully retrieved: {movie.Title}");
+                }
+
                 return movie;
             }
             catch (Exception ex)
@@ -116,12 +139,12 @@ namespace BookMediaDiscoverer.Services
         }
     }
 
-    // JSON response classes for OMDb SEARCH (not individual movie)
+    // JSON response classes for OMDb
     public class OMDbSearchResponse
     {
         public List<OMDbMovieItem> Search { get; set; } = new();
         public string TotalResults { get; set; } = string.Empty;
-        public string Response { get; set; } = string.Empty; // This is for the search response
+        public string Response { get; set; } = string.Empty;
         public string Error { get; set; } = string.Empty;
     }
 
