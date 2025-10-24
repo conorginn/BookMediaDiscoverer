@@ -2,14 +2,35 @@
 @using BookMediaDiscoverer.Models
 @using BookMediaDiscoverer.Services
 @inject IBookService BookService
+@inject IMovieService MovieService
+@inject NavigationManager NavigationManager
 
-<PageTitle>Book Discoverer</PageTitle>
+<PageTitle>Book & Media Discoverer</PageTitle>
 
-<h1>Book Search</h1>
+<h1>Book & Media Discoverer</h1>
 
+<!-- Tab Navigation -->
+<div class="tab-navigation">
+    <button class="@GetTabClass("books")" @onclick="@(() => SwitchTab("books"))">
+        📚 Book Search
+    </button>
+    <button class="@GetTabClass("movies")" @onclick="@(() => SwitchTab("movies"))">
+        🎬 Movie Search
+    </button>
+</div>
+
+<!-- Search Section -->
 <div class="search-section">
-    <input @bind="searchQuery" placeholder="Enter book title, author, or ISBN" />
-    <button @onclick="SearchBooks">Search</button>
+    @if (activeTab == "books")
+    {
+        <input @bind="bookSearchQuery" placeholder="Enter book title, author, or ISBN" />
+        <button @onclick="SearchBooks">Search Books</button>
+    }
+    else
+    {
+        <input @bind="movieSearchQuery" placeholder="Enter movie title" />
+        <button @onclick="SearchMovies">Search Movies</button>
+    }
 </div>
 
 @if (isLoading)
@@ -22,37 +43,113 @@
     <p class="error">@errorMessage</p>
 }
 
-<div class="books-grid">
-    @foreach (var book in books)
-    {
-        <div class="book-card">
-            <img src="@book.ThumbnailUrl" alt="Cover of @book.Title" onerror="this.style.display='none'" />
-            <h3>@book.Title</h3>
-            <p><strong>By:</strong> @string.Join(", ", book.Authors)</p>
-            <p><strong>Published:</strong> @book.PublishedDate</p>
-            <p><strong>Publisher:</strong> @book.Publisher</p>
-            <p><strong>Pages:</strong> @book.PageCount</p>
-            <p><strong>Rating:</strong> @book.AverageRating/5 (@book.RatingsCount reviews)</p>
-            <p class="description">@(book.Description.Length > 150 ? book.Description.Substring(0, 150) + "..." : book.Description)</p>
-            <div class="categories">
-                @foreach (var category in book.Categories.Take(3))
-                {
-                    <span class="category-tag">@category</span>
-                }
+@if (activeTab == "movies" && !string.IsNullOrEmpty(apiInfo))
+{
+    <p class="info">@apiInfo</p>
+}
+
+<!-- Results Grid -->
+@if (activeTab == "books")
+{
+    <div class="books-grid">
+        @foreach (var book in books)
+        {
+            <div class="book-card">
+                <img src="@book.ThumbnailUrl" alt="Cover of @book.Title" onerror="this.style.display='none'" />
+                <h3>@book.Title</h3>
+                <p><strong>By:</strong> @string.Join(", ", book.Authors)</p>
+                <p><strong>Published:</strong> @book.PublishedDate</p>
+                <p><strong>Publisher:</strong> @book.Publisher</p>
+                <p><strong>Pages:</strong> @book.PageCount</p>
+                <p><strong>Rating:</strong> @book.AverageRating/5 (@book.RatingsCount reviews)</p>
+                <p class="description">@GetShortDescription(book.Description, 150)</p>
+                <div class="categories">
+                    @foreach (var category in book.Categories.Take(3))
+                    {
+                        <span class="category-tag">@category</span>
+                    }
+                </div>
             </div>
-        </div>
-    }
-</div>
+        }
+    </div>
+}
+else
+{
+    <div class="movies-grid">
+        @foreach (var movie in movies)
+        {
+            <div class="movie-card">
+                <img src="@GetMoviePoster(movie.Poster)" alt="Poster for @movie.Title" />
+                <h3>@movie.Title</h3>
+                <p><strong>Year:</strong> @movie.Year</p>
+                <p><strong>Rated:</strong> @movie.Rated</p>
+                <p><strong>Runtime:</strong> @movie.Runtime</p>
+                <p><strong>Director:</strong> @movie.Director</p>
+                <p><strong>IMDb Rating:</strong> @movie.ImdbRating/10</p>
+                <p class="plot">@GetShortDescription(movie.Plot, 150)</p>
+                <div class="genre-tags">
+                    @if (!string.IsNullOrEmpty(movie.Genre))
+                    {
+                        foreach (var genre in movie.Genre.Split(',').Take(3))
+                        {
+                            <span class="genre-tag">@genre.Trim()</span>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
 
 @code {
-    private string searchQuery = string.Empty;
+    // Tab management
+    private string activeTab = "books";
+    
+    // Book search variables
+    private string bookSearchQuery = string.Empty;
     private List<Book> books = new List<Book>();
+    
+    // Movie search variables
+    private string movieSearchQuery = string.Empty;
+    private List<Movie> movies = new List<Movie>();
+    
+    // Shared state
     private bool isLoading = false;
     private string errorMessage = null;
+    private string apiInfo = "Note: Using OMDb free API key from omdbapi.com";
+
+    private string GetTabClass(string tabName)
+    {
+        return activeTab == tabName ? "tab-active" : "tab";
+    }
+
+    private void SwitchTab(string tab)
+    {
+        activeTab = tab;
+        errorMessage = null;
+        StateHasChanged();
+    }
+
+    private string GetShortDescription(string description, int maxLength)
+    {
+        if (string.IsNullOrEmpty(description)) 
+            return "No description available";
+        
+        return description.Length > maxLength ? description.Substring(0, maxLength) + "..." : description;
+    }
+
+private string GetMoviePoster(string posterUrl)
+{
+    if (string.IsNullOrEmpty(posterUrl) || posterUrl == "N/A")
+    {
+        return $"{NavigationManager.BaseUri}placeholder-movie.png";
+    }
+    return posterUrl;
+}
 
     private async Task SearchBooks()
     {
-        if (string.IsNullOrWhiteSpace(searchQuery))
+        if (string.IsNullOrWhiteSpace(bookSearchQuery))
         {
             errorMessage = "Please enter a search term";
             return;
@@ -64,7 +161,7 @@
 
         try
         {
-            books = await BookService.SearchBooksAsync(searchQuery);
+            books = await BookService.SearchBooksAsync(bookSearchQuery);
             if (!books.Any())
             {
                 errorMessage = "No books found. Try a different search term.";
@@ -73,6 +170,39 @@
         catch (Exception ex)
         {
             errorMessage = "An error occurred while searching for books. Please try again.";
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SearchMovies()
+    {
+        if (string.IsNullOrWhiteSpace(movieSearchQuery))
+        {
+            errorMessage = "Please enter a movie title";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = null;
+        movies.Clear();
+        StateHasChanged();
+
+        try
+        {
+            movies = await MovieService.SearchMoviesAsync(movieSearchQuery);
+            if (!movies.Any())
+            {
+                errorMessage = "No movies found. Try a different search term.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An error occurred while searching for movies. Please try again.";
             Console.WriteLine($"Error: {ex.Message}");
         }
         finally
