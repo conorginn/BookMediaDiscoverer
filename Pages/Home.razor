@@ -1,7 +1,84 @@
 ﻿@page "/"
+@using BookMediaDiscoverer.Models
+@using BookMediaDiscoverer.Services
+@inject IBookService BookService
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Book Discoverer</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Book Search</h1>
 
-Welcome to your new app.
+<div class="search-section">
+    <input @bind="searchQuery" placeholder="Enter book title, author, or ISBN" />
+    <button @onclick="SearchBooks">Search</button>
+</div>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+
+@if (errorMessage != null)
+{
+    <p class="error">@errorMessage</p>
+}
+
+<div class="books-grid">
+    @foreach (var book in books)
+    {
+        <div class="book-card">
+            <img src="@book.ThumbnailUrl" alt="Cover of @book.Title" onerror="this.style.display='none'" />
+            <h3>@book.Title</h3>
+            <p><strong>By:</strong> @string.Join(", ", book.Authors)</p>
+            <p><strong>Published:</strong> @book.PublishedDate</p>
+            <p><strong>Publisher:</strong> @book.Publisher</p>
+            <p><strong>Pages:</strong> @book.PageCount</p>
+            <p><strong>Rating:</strong> @book.AverageRating/5 (@book.RatingsCount reviews)</p>
+            <p class="description">@(book.Description.Length > 150 ? book.Description.Substring(0, 150) + "..." : book.Description)</p>
+            <div class="categories">
+                @foreach (var category in book.Categories.Take(3))
+                {
+                    <span class="category-tag">@category</span>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string searchQuery = string.Empty;
+    private List<Book> books = new List<Book>();
+    private bool isLoading = false;
+    private string errorMessage = null;
+
+    private async Task SearchBooks()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            errorMessage = "Please enter a search term";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            books = await BookService.SearchBooksAsync(searchQuery);
+            if (!books.Any())
+            {
+                errorMessage = "No books found. Try a different search term.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "An error occurred while searching for books. Please try again.";
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+}
