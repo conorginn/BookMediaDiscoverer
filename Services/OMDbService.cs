@@ -6,21 +6,24 @@ namespace BookMediaDiscoverer.Services
     public class OMDbService : IMovieService
     {
         private readonly HttpClient _httpClient;
-        private const string BaseUrl = "http://www.omdbapi.com/";
+        private const string BaseUrl = "https://www.omdbapi.com/"; // Using HTTPS
         private readonly string _apiKey;
 
         public OMDbService(HttpClient httpClient)
         {
             _httpClient = httpClient;
-            // Free API key from http://www.omdbapi.com/apikey.aspx
-            _apiKey = "752862ab";
+            _apiKey = "752862ab"; // Using demo key for testing
         }
 
         public async Task<List<Movie>> SearchMoviesAsync(string query)
         {
             try
             {
-                var response = await _httpClient.GetAsync($"{BaseUrl}?apikey={_apiKey}&s={Uri.EscapeDataString(query)}");
+                Console.WriteLine($"Searching for movies: {query}");
+                var url = $"{BaseUrl}?apikey={_apiKey}&s={Uri.EscapeDataString(query)}";
+                Console.WriteLine($"API URL: {url}");
+
+                var response = await _httpClient.GetAsync(url);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -29,32 +32,51 @@ namespace BookMediaDiscoverer.Services
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Raw JSON response: {json}");
+
                 var result = JsonSerializer.Deserialize<OMDbSearchResponse>(json, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result?.Search == null || result.Response == "False")
+                // Check if the API returned an error
+                if (result?.Response == "False")
                 {
-                    Console.WriteLine($"No results or API error: {result?.Error}");
+                    Console.WriteLine($"API Error: {result.Error}");
                     return new List<Movie>();
                 }
 
-                // Get details for each movie (limited to avoid too many requests)
-                var movies = new List<Movie>();
-                foreach (var movieItem in result.Search.Take(3))
+                if (result?.Search == null || !result.Search.Any())
                 {
-                    if (!string.IsNullOrEmpty(movieItem.ImdbID))
-                    {
-                        var movie = await GetMovieDetailsAsync(movieItem.ImdbID);
-                        if (movie != null)
-                            movies.Add(movie);
-
-                        // Small delay to be respectful to the API
-                        await Task.Delay(100);
-                    }
+                    Console.WriteLine("No search results found");
+                    return new List<Movie>();
                 }
 
+                Console.WriteLine($"Found {result.Search.Count} movies in search results");
+
+                // Convert search results to Movie objects with basic info
+                var movies = result.Search.Select(item => new Movie
+                {
+                    ImdbID = item.ImdbID,
+                    Title = item.Title,
+                    Year = item.Year,
+                    Type = item.Type,
+                    Poster = item.Poster,
+                    // Add placeholder data for other fields
+                    Rated = "N/A",
+                    Released = "N/A",
+                    Runtime = "N/A",
+                    Genre = "N/A",
+                    Director = "N/A",
+                    Writer = "N/A",
+                    Actors = "N/A",
+                    Plot = "Plot details available in full movie view",
+                    Language = "N/A",
+                    Country = "N/A",
+                    ImdbRating = "N/A"
+                }).ToList();
+
+                Console.WriteLine($"Returning {movies.Count} movies");
                 return movies;
             }
             catch (Exception ex)
@@ -68,11 +90,13 @@ namespace BookMediaDiscoverer.Services
         {
             try
             {
-                var response = await _httpClient.GetAsync($"{BaseUrl}?apikey={_apiKey}&i={imdbId}");
+                Console.WriteLine($"Getting details for movie: {imdbId}");
+                var url = $"{BaseUrl}?apikey={_apiKey}&i={imdbId}";
 
+                var response = await _httpClient.GetAsync(url);
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"API request failed: {response.StatusCode}");
+                    Console.WriteLine($"Details request failed: {response.StatusCode}");
                     return null;
                 }
 
@@ -92,12 +116,12 @@ namespace BookMediaDiscoverer.Services
         }
     }
 
-    // JSON response classes for OMDb
+    // JSON response classes for OMDb SEARCH (not individual movie)
     public class OMDbSearchResponse
     {
         public List<OMDbMovieItem> Search { get; set; } = new();
         public string TotalResults { get; set; } = string.Empty;
-        public string Response { get; set; } = string.Empty;
+        public string Response { get; set; } = string.Empty; // This is for the search response
         public string Error { get; set; } = string.Empty;
     }
 
